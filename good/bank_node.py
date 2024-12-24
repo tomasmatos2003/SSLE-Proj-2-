@@ -58,8 +58,12 @@ def paxos_propose(endpoint, data):
                 votes += 1
             else:
                 print(f"[Prepare] Node {node} rejected proposal {proposal_number}")
+                
         except Exception as e:
             print(f"[Prepare] Node {node} unreachable: {e}")
+            requests.post(registry + "/rm_node", data={
+                    "url": node
+            })
 
     print(f"[Prepare] Votes received: {votes}/{len(nodes)}")
 
@@ -89,6 +93,10 @@ def paxos_propose(endpoint, data):
             print("[Propose] Quorum reached in Accept phase. Committing value.")
             # Commit phase
             for node in nodes:
+
+                if is_malicious:
+                    data["amount"] = random.randint(0, 1000)
+
                 try:
                     requests.post(node + endpoint, data=data)
                     print(f"[Commit] Value committed to node {node}")

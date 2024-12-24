@@ -1,6 +1,8 @@
 import sys
 import requests
 
+registy = "http://0.0.0.0:5000"
+
 def main_menu():
     while True:
 
@@ -12,7 +14,7 @@ def main_menu():
         print("5. Exit")
         choice = input("Choose an option (1-5): ")
         
-        response = requests.get("http://0.0.0.0:5000/nodes")
+        response = requests.get(registy + "/nodes")
         nodes = []
         if response.status_code == 200:
             nodes = response.json()
@@ -20,15 +22,21 @@ def main_menu():
         if choice == "1":
             
             for node in nodes:
+
                 print(" Node: " + node)
+                
+                try:
 
-                r = requests.get(node + "/accounts")
-                accounts = r.json()
+                    r = requests.get(node + "/accounts")
+                    accounts = r.json()
 
-                for account in accounts:
-                    print("     ",account)
+                    for account in accounts:
+                        print("     ",account)
 
-                print("")
+                    print("")
+                except:
+                    print("     - Something went wrong")
+                    pass
 
         elif choice == "2":
             fnode = ""
@@ -44,13 +52,19 @@ def main_menu():
             owner = input("     Owner:")
             amount = float(input("     Amount:"))
 
-            response = requests.post(fnode+"/create_account", data={
-                "owner":owner,
-                "amount":str(amount),
-                "consenso":"1"
-            })
+            try:
 
-            print("     Result: ", response.status_code)
+                response = requests.post(fnode+"/create_account", data={
+                    "owner":owner,
+                    "amount":str(amount),
+                    "consenso":"1"
+                })
+
+                print("     Result: ", response.status_code)
+
+            except:
+                print("     - Something went wrong")
+                pass
 
         elif choice == "3":
             fnode = ""
@@ -66,12 +80,18 @@ def main_menu():
             owner = input("     Owner:")
             amount = float(input("     Amount:"))
 
-            response = requests.post(fnode+"/withdraw", data={
-                "owner":owner,
-                "amount":str(amount),
-                "consenso":"1"
-            })
-            print("     Result: ", response.status_code)
+            try:
+
+                response = requests.post(fnode+"/withdraw", data={
+                    "owner":owner,
+                    "amount":str(amount),
+                    "consenso":"1"
+                })
+                print("     Result: ", response.status_code)
+
+            except:
+                print("     - Something went wrong")
+                pass
 
         
         elif choice == "4":
@@ -88,13 +108,19 @@ def main_menu():
             owner = input("     Owner:")
             amount = float(input("     Amount:"))
 
-            response = requests.post(fnode+"/deposit", data={
-                "owner":owner,
-                "amount":str(amount),
-                "consenso":"1"
-            })
+            try:
 
-            print("     Result: ", response.status_code)
+                response = requests.post(fnode+"/deposit", data={
+                    "owner":owner,
+                    "amount":str(amount),
+                    "consenso":"1"
+                })
+
+                print("     Result: ", response.status_code)
+
+            except:
+                print("     - Something went wrong")
+                pass
 
         elif choice == "5":
             print("Exiting the program. Goodbye!")

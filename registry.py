@@ -7,20 +7,20 @@ app = Flask(__name__)
 
 nodes = []
 
-def health_check():
-    global nodes
-    while True:
-        to_rm = []
-        for node in nodes:
-            try:
-                response = requests.get(node + "/health", timeout=5)
-                if response.status_code != 200:
-                    to_rm.append(node)
-            except requests.exceptions.RequestException:
-                to_rm.append(node)
+# def health_check():
+#     global nodes
+#     while True:
+#         to_rm = []
+#         for node in nodes:
+#             try:
+#                 response = requests.get(node + "/health", timeout=5)
+#                 if response.status_code != 200:
+#                     to_rm.append(node)
+#             except requests.exceptions.RequestException:
+#                 to_rm.append(node)
 
-        nodes = [n for n in nodes if n not in to_rm]
-        time.sleep(10) 
+#         nodes = [n for n in nodes if n not in to_rm]
+#         time.sleep(30) 
 
 @app.route('/nodes', methods=['GET'])
 def get_nodes():
@@ -37,8 +37,20 @@ def add_node():
     nodes.append(node)
     return jsonify(nodes), 201
 
+
+@app.route('/rm_node', methods=['POST'])
+def rm_node():
+    data = request.form.to_dict()
+    node = data["url"]
+
+    if node in nodes:
+        nodes.remove(node)
+        return jsonify(node), 200
+
+    return jsonify(nodes), 409
+
 if __name__ == '__main__':
-    health_check_thread = threading.Thread(target=health_check, daemon=True)
-    health_check_thread.start()
+    # health_check_thread = threading.Thread(target=health_check, daemon=True)
+    # health_check_thread.start()
 
     app.run(host='0.0.0.0', port=5000)
