@@ -103,7 +103,7 @@ if __name__ == '__main__':
             is_malicious = True
             print("Running in malicious mode...")
         else:
-            print("Usage: python script.py <port> [-m]")
+            print("Usage: python3 good_pbft/bank_node.py <port> [-m]")
             sys.exit(1)
 
 

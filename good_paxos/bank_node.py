@@ -43,12 +43,20 @@ def paxos_propose(endpoint, data):
     nodes = [node for node in nodes if port not in node]
     quorum_size = len(nodes) // 2 + 1  # Majority required for consensus
 
+    if is_malicious:
+        randoms = [random.randint(0, 1000) for _ in nodes]
+
     print(f"[Propose] Quorum size calculated as {quorum_size}")
     print(f"[Propose] Nodes participating: {nodes}")
 
     # Prepare Phase
+    idx = 0
     for node in nodes:
+        if is_malicious:
+            data["amount"] = randoms[idx]
+
         try:
+            
             resp = requests.post(node + "/paxos/prepare", json={
                 "proposal_number": proposal_number,
                 "data": data
@@ -58,12 +66,15 @@ def paxos_propose(endpoint, data):
                 votes += 1
             else:
                 print(f"[Prepare] Node {node} rejected proposal {proposal_number}")
-                
+            
+            
         except Exception as e:
             print(f"[Prepare] Node {node} unreachable: {e}")
             requests.post(registry + "/rm_node", data={
                     "url": node
             })
+
+        idx += 1
 
     print(f"[Prepare] Votes received: {votes}/{len(nodes)}")
 
@@ -72,8 +83,14 @@ def paxos_propose(endpoint, data):
         print("[Propose] Quorum reached in Prepare phase.")
         # Accept Phase
         votes = 0  # Reset vote count
+        idx = 0
         for node in nodes:
+
+            if is_malicious:
+                data["amount"] = randoms[idx]
+
             try:
+                
                 resp = requests.post(node + "/paxos/accept", json={
                     "proposal_number": proposal_number,
                     "data": data
@@ -83,8 +100,11 @@ def paxos_propose(endpoint, data):
                     votes += 1
                 else:
                     print(f"[Accept] Node {node} rejected proposal {proposal_number}")
+                
             except Exception as e:
                 print(f"[Accept] Node {node} unreachable: {e}")
+
+            idx += 1
 
         print(f"[Accept] Votes received: {votes}/{len(nodes)}")
 
@@ -92,16 +112,21 @@ def paxos_propose(endpoint, data):
         if votes >= quorum_size:
             print("[Propose] Quorum reached in Accept phase. Committing value.")
             # Commit phase
+            idx = 0
             for node in nodes:
 
                 if is_malicious:
-                    data["amount"] = random.randint(0, 1000)
+                    data["amount"] = randoms[idx]
 
                 try:
                     requests.post(node + endpoint, data=data)
                     print(f"[Commit] Value committed to node {node}")
+                
+                
                 except Exception as e:
                     print(f"[Commit] Node {node} unreachable: {e}")
+
+                idx += 1
         else:
             print("[Propose] Quorum not reached in Accept phase.")
     else:
@@ -210,9 +235,13 @@ def withdraw():
 if __name__ == '__main__':
     port = str(sys.argv[1])
 
-    if len(sys.argv) == 3 and str(sys.argv[2]) == "-m":
-        is_malicious = True
-        print("Running in malicious mode...")
+    if len(sys.argv) == 3:
+        if str(sys.argv[2]) == "-m":
+            is_malicious = True
+            print("Running in malicious mode...")
+        else:
+            print("Usage: python3 good_paxos/bank_node.py <port> [-m]")
+            sys.exit(1)
 
     response = requests.post(registry + "/node", data={
         "url": f"http://{incus_ip}:{port}"
