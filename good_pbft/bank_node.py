@@ -4,6 +4,8 @@ import requests
 from account import Account
 import threading
 import uuid 
+import time
+import random
 
 app = Flask(__name__)
 
@@ -24,6 +26,21 @@ quorum_size = 0
 def get_health():
     return jsonify(), 200
 
+@app.route('/newNodes', methods=['POST'])
+def addnode():
+    global nodes
+    
+    data = request.form.to_dict()
+    url = data["url"]
+
+    if url in nodes:
+        return jsonify({"status": "rejected"}), 400
+
+    nodes.append(url)
+
+    print(nodes)
+    return jsonify({"status": "accepted"}), 200
+
 
 @app.route('/accounts', methods=['GET'])
 def get_accounts():
@@ -33,15 +50,18 @@ def get_accounts():
 
 def broadcast_to_nodes(endpoint, data):
     """Broadcast a message to all registered nodes concurrently."""
+    global nodes
+   
+    print(nodes)
 
-    nodes_ = requests.get(registry + "/nodes").json()
-    nodes = [node for node in nodes_ if port not in node]
     def send_request(node):
+        delay = random.uniform(0, 1)
         try:
+            time.sleep(delay)
             requests.post(node + endpoint, data=data)
         except Exception as e:
             print(f"Failed to contact node {node}: {e}")
-            requests.post(registry + "/rm_node", data={"url": node})
+            # requests.post(registry + "/rm_node", data={"url": node})
 
     threads = []
     for node in nodes:
@@ -51,6 +71,8 @@ def broadcast_to_nodes(endpoint, data):
 
     for thread in threads:
         thread.join()
+
+    
 
 @app.route('/preprepare', methods=['POST'])
 def preprepare():
@@ -65,6 +87,9 @@ def preprepare():
     client_ip = request.remote_addr
     message_id = data["message_id"] 
 
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
+
     print(f"[Pre-Prepare] Received operation: {operation} from {client_ip}")
     
     if message_id not in preprepared_messages:
@@ -75,26 +100,29 @@ def preprepare():
     if message_id not in prepared_messages:
         prepared_messages[message_id] = []
 
+    time.sleep(1) #ensure receiving
+
     broadcast_to_nodes("/prepare", data)
     return jsonify({"status": "accepted"}), 200
 
 
 @app.route('/prepare', methods=['POST'])
 def prepare():
-    global prepared_messages
+    global prepared_messages, nodes
     """PBFT Prepare Phase."""
-    nodes_ = requests.get(registry + "/nodes").json()
-    nodes = [node for node in nodes_ if port not in node]
 
     data = request.form.to_dict()
     operation = data["operation"]
     client_ip = request.remote_addr
     message_id = data["message_id"]
 
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
+
     print(f"[Prepare] Received operation: {operation} from {client_ip} data: {data}")
-    
+    print(nodes)
     n = len(nodes)  
-    b = (n - 1) // 3
+    b = n // 3
     quorum_size = n - b
     
     if message_id in prepared_messages:
@@ -102,8 +130,9 @@ def prepare():
         print(len(prepared_messages[message_id]), quorum_size)
 
     print(prepared_messages)
-
-    if message_id not in preprepared_messages.keys() :# is the proposer
+    
+    # is the proposer
+    if message_id not in preprepared_messages.keys() :
 
         print("SOU O PROPOSER")
             
@@ -113,12 +142,13 @@ def prepare():
 
             if message_id in prepared_messages:
                 del prepared_messages[message_id] 
-            
+
+            time.sleep(1) #ensure receiving
             broadcast_to_nodes("/commit", data)
                 
             return jsonify({"status": "prepared"}), 200
-
-    elif len(preprepared_messages[message_id]) == 1: # is a regular
+    # is a regular
+    elif len(preprepared_messages[message_id]) == 1: 
         print("SOU UM NORMAL")
        
         if message_id in prepared_messages and len(prepared_messages[message_id]) >= quorum_size - 1:
@@ -130,7 +160,8 @@ def prepare():
 
             if message_id in prepared_messages:
                 del prepared_messages[message_id] 
-            
+                
+            time.sleep(1) #ensure receiving
             broadcast_to_nodes("/commit", data)
                 
             return jsonify({"status": "prepared"}), 200
@@ -139,20 +170,18 @@ def prepare():
     return jsonify({"status": "rejected"}), 400
 
 
-
-
 @app.route('/commit', methods=['POST'])
 def commit():
     """PBFT Commit Phase."""
-    global committed_messages
-
-    nodes_ = requests.get(registry + "/nodes").json()
-    nodes = [node for node in nodes_ if port not in node]
+    global committed_messages, nodes
     
     data = request.form.to_dict()
     operation = data["operation"]
     client_ip = request.remote_addr
     message_id = data["message_id"]
+
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
 
     print(f"[Commit] Received operation: {operation} from {client_ip}")
     
@@ -162,12 +191,12 @@ def commit():
     committed_messages[message_id].append(client_ip)  # SOLVEE here - change operation to an req id []
 
     n = len(nodes)  
-    b = (n - 1) // 3
+    b = n // 3
     quorum_size = n - b
 
-    print(len(committed_messages[message_id]) , quorum_size)
+    print(len(committed_messages[message_id]) , quorum_size, quorum_size == len(committed_messages[message_id]))
 
-    if len(committed_messages[message_id]) == quorum_size:
+    if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
 
         print("EXECUTAR")
         execute_operation(data)
@@ -248,6 +277,9 @@ def create_account():
     data["message_id"] = message_id 
     prepared_messages[message_id] = []
 
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
+
     print(f"[Create Account] Request received from {client_ip}: {data}")
     if int(data.get("consenso", 0)) == 1:
         data["operation"] = "create_account"
@@ -270,6 +302,9 @@ def deposit():
     data["message_id"] = message_id 
     prepared_messages[message_id] = []
 
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
+
     print(f"[Deposit] Request received from {client_ip}: {data}")
     if int(data.get("consenso", 0)) == 1:
         data["operation"] = "deposit"
@@ -291,6 +326,9 @@ def withdraw():
     data["message_id"] = message_id 
     prepared_messages[message_id] = []
 
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
+
     print(f"[Withdraw] Request received from {client_ip}: {data}")
     if int(data.get("consenso", 0)) == 1:
         data["operation"] = "withdraw"
@@ -301,7 +339,7 @@ def withdraw():
     return jsonify({"status": "initiated"}), 200
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     port = str(sys.argv[1])
 
     if len(sys.argv) == 3:
@@ -313,5 +351,11 @@ if __name__ == '__main__':
             sys.exit(1)
 
     response = requests.post(registry + "/node", data={"url": f"http://{incus_ip}:{port}"})
-   
+    
+    nodes_ = requests.get(registry + "/nodes").json()
+    nodes = [node for node in nodes_ if port not in node]
+
+    for node in nodes:
+        requests.post(node + "/newNodes", data={"url": f"http://{incus_ip}:{port}"})
+
     app.run(host='0.0.0.0', port=port)
