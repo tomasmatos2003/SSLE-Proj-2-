@@ -100,7 +100,7 @@ def preprepare():
         preprepared_messages = {}
 
     data = request.form.to_dict()
-    print("preprepare ", data)
+
     operation = data["operation"]        
     message_id = data["message_id"] 
     
@@ -109,9 +109,9 @@ def preprepare():
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
     data["digest"] = digest
-    print(".. ", request_digest, digest)
+
     if request_digest != digest:
-        print("LOWER THE REPUTATION  preprepare ", recv_node)
+        print("LOWER THE REPUTATION preprepare ", recv_node)
         reputation[recv_node] -= 20
     else:
         print("ALL OK " )
@@ -229,8 +229,8 @@ def checkDigests(message_id):
             )
 
         # Debugging output
-        print(f"[{phase_name.capitalize()}] Digest Details: {digest_nodes}")
-        print(f"[{phase_name.capitalize()}] Majority Digest: {majority_digest if digest_counts else 'None'} with count {majority_count if digest_counts else 0}")
+        print(f"    [{phase_name.capitalize()}] Digest Details: {digest_nodes}")
+        print(f"    [{phase_name.capitalize()}] Majority Digest: {majority_digest if digest_counts else 'None'} with count {majority_count if digest_counts else 0}")
 
     # Process each phase
     if message_id in preprepared_messages:
@@ -250,9 +250,9 @@ def checkDigests(message_id):
     sorted_digest_details = dict(sorted(digest_details.items(), key=lambda item: item[1][0]))
 
     # Debugging output
-    print(f"Overall Majority Digest: {overall_majority_digest} with count {overall_majority_count}")
-    print(f"Trust Factors: {trust_factors}")
-    print(f"Sorted Digest Details: {sorted_digest_details}")
+    # print(f"Overall Majority Digest: {overall_majority_digest} with count {overall_majority_count}")
+    # print(f"Trust Factors: {trust_factors}")
+    # print(f"Sorted Digest Details: {sorted_digest_details}")
     
     return sorted_digest_details, overall_majority_count  # Return sorted dictionary
 
@@ -288,7 +288,6 @@ def prepare():
     
     if message_id in prepared_messages:
         prepared_messages[message_id].append(data)
-        print(len(prepared_messages[message_id]), quorum_size)
 
     trust_factors, max_count = checkDigests(message_id)
     print("trust ", trust_factors)
@@ -307,14 +306,10 @@ def prepare():
                 print("BAIXAR REP")
                 bizanti_node = senders[0]
                 reputation[bizanti_node] -= 30
-            # else:
-            #     print("NAO BAIXAR")
-            
-            # print(hash, " : ", trust_factors[hash])
 
-        major_hash = list(trust_factors.keys())[-1]
-        new_owner = trust_factors[major_hash][2][0]
-        new_amount = trust_factors[major_hash][3][0]
+        greater_hash = list(trust_factors.keys())[-1]
+        new_owner = trust_factors[greater_hash][2][0]
+        new_amount = trust_factors[greater_hash][3][0]
         
         
         datacopy['owner'] = new_owner
@@ -325,7 +320,7 @@ def prepare():
         # print("SOU O PROPOSER")
             
         if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size:
-            print("VAI DALE ",trust_factors )
+          
             print("COMMIT " , datacopy)
             time.sleep(2) #ensure receiving
           
@@ -337,7 +332,7 @@ def prepare():
         # print("SOU UM NORMAL")
        
         if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size - 1:
-            print("VAI DALE ",trust_factors )
+          
             print("COMMIT " , datacopy)
 
             time.sleep(2) #ensure receiving
@@ -396,11 +391,11 @@ def commit():
                 bizanti_node = senders[0]
                 reputation[bizanti_node] -= 30
             
-        major_hash = list(trust_factors.keys())[-1]  # Safely access the last key
-        new_owner = trust_factors[major_hash][2][0]  # Get the new owner
-        new_amount = trust_factors[major_hash][3][0]  # Get the new amount
+        greater_hash = list(trust_factors.keys())[-1]  # Safely access the last key
+        new_owner = trust_factors[greater_hash][2][0]  # Get the new owner
+        new_amount = trust_factors[greater_hash][3][0]  # Get the new amount
 
-        print(f"Major Hash: {major_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
+        print(f"Major Hash: {greater_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
 
         
         data['owner'] = new_owner
@@ -410,15 +405,11 @@ def commit():
     b = n // 3
     quorum_size = n - b
 
-    # print(len(committed_messages[message_id]) , quorum_size, quorum_size == len(committed_messages[message_id]))
-
     if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
         
         print("EXECUTAR")
         execute_operation(data)
-        
-        # del committed_messages[message_id] 
-        
+                
         return jsonify({"status": "committed"}), 200
 
     print(f"[Commit] Consensus not yet achieved for operation: {operation} from {data['node']}")
@@ -500,7 +491,6 @@ def create_account():
         serialized_data = json.dumps(data, sort_keys=True) 
         digest = hashlib.sha256(serialized_data.encode()).hexdigest()
         
-        print(serialized_data , " ..")
         data["digest"] = digest
 
         broadcast_to_nodes("/preprepare", data)
