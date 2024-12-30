@@ -74,6 +74,7 @@ def broadcast_to_nodes(endpoint, data):
             requests.post(node + endpoint, data=data)
         except Exception as e:
             print(f"Failed to contact node {node}: {e}")
+            nodes.remove(node)
             # requests.post(registry + "/rm_node", data={"url": node})
 
     threads = []
@@ -112,9 +113,9 @@ def preprepare():
 
     if request_digest != digest:
         print("LOWER THE REPUTATION preprepare ", recv_node)
-        reputation[recv_node] -= 20
-    else:
-        print("ALL OK " )
+        reputation[recv_node] -= 25
+    # else:
+    #     print("ALL OK " )
 
     if reputation[recv_node] < 20:
         return jsonify({"status": "rejected"}), 400
@@ -195,11 +196,11 @@ def checkDigests(message_id):
             if digest_amounts[digest] is None:
                 digest_amounts[digest] = amount
             elif digest_amounts[digest] != amount:
-                print(f"Conflict detected for digest {digest}: {digest_amounts[digest]} vs {amount}")
+                # print(f"Conflict detected for digest {digest}: {digest_amounts[digest]} vs {amount}")
                 mcpy = m.copy()
                 correct_amount = resolve_conflict(digest, digest_amounts[digest], mcpy)
                 digest_amounts[digest] = correct_amount
-                print(f"Resolved conflict for digest {digest}. Correct amount: {correct_amount}")
+                # print(f"Resolved conflict for digest {digest}. Correct amount: {correct_amount}")
 
         # Count occurrences of each digest
         digest_counts = Counter({digest: len(nodes) for digest, nodes in digest_nodes.items()})
@@ -229,8 +230,8 @@ def checkDigests(message_id):
             )
 
         # Debugging output
-        print(f"    [{phase_name.capitalize()}] Digest Details: {digest_nodes}")
-        print(f"    [{phase_name.capitalize()}] Majority Digest: {majority_digest if digest_counts else 'None'} with count {majority_count if digest_counts else 0}")
+        # print(f"    [{phase_name.capitalize()}] Digest Details: {digest_nodes}")
+        # print(f"    [{phase_name.capitalize()}] Majority Digest: {majority_digest if digest_counts else 'None'} with count {majority_count if digest_counts else 0}")
 
     # Process each phase
     if message_id in preprepared_messages:
@@ -270,13 +271,13 @@ def prepare():
 
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
-    data["digest"] = digest
+    data["digest"] = request_digest
     
     if request_digest != digest:
         print("LOWER THE REPUTATION prepare  ", recv_node)
-        reputation[recv_node] -= 20
-    else:
-        print("ALL OK")
+        reputation[recv_node] -= 25
+    # else:
+    #     print("ALL OK")
 
     print(f"[Prepare] Received operation: {operation} from {recv_node} data: {data}")
     
@@ -285,43 +286,44 @@ def prepare():
     n = len(nodes)  
     b = n // 3
     quorum_size = n - b
+    # print("QUORUM ", quorum_size)
     
     if message_id in prepared_messages:
         prepared_messages[message_id].append(data)
 
     trust_factors, max_count = checkDigests(message_id)
-    print("trust ", trust_factors)
+    # print("trust ", trust_factors)
     # exclude the last because it is the majority
-    print("MAX ", max_count)
+    # print("MAX ", max_count)
 
     datacopy = data.copy()
-
-    if not trust_factors:
-        print("No trust factors to process.")
-    else:
-        for hash in list(trust_factors.keys())[:-1]:
-            count = trust_factors[hash][0]
-            senders = trust_factors[hash][1]
-            if max_count > count and len(senders) == 1:
-                print("BAIXAR REP")
-                bizanti_node = senders[0]
-                reputation[bizanti_node] -= 30
-
-        greater_hash = list(trust_factors.keys())[-1]
-        new_owner = trust_factors[greater_hash][2][0]
-        new_amount = trust_factors[greater_hash][3][0]
-        
-        
-        datacopy['owner'] = new_owner
-        datacopy['amount'] = new_amount
 
     if message_id not in preprepared_messages.keys() :
 
         # print("SOU O PROPOSER")
             
-        if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size:
+        if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size + 1:
           
-            print("COMMIT " , datacopy)
+            if trust_factors:
+            
+                for hash in list(trust_factors.keys())[:-1]:
+                    count = trust_factors[hash][0]
+                    senders = trust_factors[hash][1]
+                    if max_count > count and len(senders) == 1:
+                        print("BAIXAR REPUTATION PREPARE ", senders[0])
+                        bizanti_node = senders[0]
+                        reputation[bizanti_node] -= 25
+
+                greater_hash = list(trust_factors.keys())[-1]
+                new_owner = trust_factors[greater_hash][2]
+                new_amount = trust_factors[greater_hash][3]
+                
+                # print(f"Major Hash: {greater_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
+
+                datacopy['owner'] = new_owner
+                datacopy['amount'] = new_amount
+
+            # print("COMMIT " , datacopy)
             time.sleep(2) #ensure receiving
           
             broadcast_to_nodes("/commit", datacopy)
@@ -331,9 +333,28 @@ def prepare():
     elif len(preprepared_messages[message_id]) == 1: 
         # print("SOU UM NORMAL")
        
-        if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size - 1:
+        if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size:
           
-            print("COMMIT " , datacopy)
+            if trust_factors:
+        
+                for hash in list(trust_factors.keys())[:-1]:
+                    count = trust_factors[hash][0]
+                    senders = trust_factors[hash][1]
+                    if max_count > count and len(senders) == 1:
+                        print("BAIXAR REPUTATION PREPARE ", senders[0])
+                        bizanti_node = senders[0]
+                        reputation[bizanti_node] -= 25
+
+                greater_hash = list(trust_factors.keys())[-1]
+                new_owner = trust_factors[greater_hash][2]
+                new_amount = trust_factors[greater_hash][3]
+                
+                # print(f"Major Hash: {greater_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
+
+                datacopy['owner'] = new_owner
+                datacopy['amount'] = new_amount
+
+            # print("COMMIT " , datacopy)
 
             time.sleep(2) #ensure receiving
 
@@ -359,11 +380,12 @@ def commit():
 
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
-    data["digest"] = digest
+    data["digest"] = request_digest
+
 
     if request_digest != digest:
-        print("LOWER THE REPUTATION commit", recv_node)
-        reputation[recv_node] -= 20
+        print("LOWER THE REPUTATION commit ", recv_node , " data ", serialized_data, " digest ", digest, " req_digest ", request_digest)
+        reputation[recv_node] -= 25
 
     print(f"[Commit] Received operation: {operation} from {recv_node}, data {data}")
     
@@ -374,32 +396,7 @@ def commit():
     
     committed_messages[message_id].append(data)  # SOLVEE here - change operation to an req id []
 
-
     trust_factors, max_count = checkDigests(message_id)
-    print("trust ", trust_factors)
-    # exclude the last because it is the majority
-    print("MAX ", max_count)
-
-    if not trust_factors:
-        print("No trust factors to process.")
-    else:
-        for hash in list(trust_factors.keys())[:-1]:
-            count = trust_factors[hash][0]
-            senders = trust_factors[hash][1]
-            if max_count > count and len(senders) == 1:
-                print("BAIXAR REP")
-                bizanti_node = senders[0]
-                reputation[bizanti_node] -= 30
-            
-        greater_hash = list(trust_factors.keys())[-1]  # Safely access the last key
-        new_owner = trust_factors[greater_hash][2][0]  # Get the new owner
-        new_amount = trust_factors[greater_hash][3][0]  # Get the new amount
-
-        print(f"Major Hash: {greater_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
-
-        
-        data['owner'] = new_owner
-        data['amount'] = new_amount
 
     n = len(nodes)  
     b = n // 3
@@ -407,7 +404,27 @@ def commit():
 
     if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
         
-        print("EXECUTAR")
+
+        if trust_factors:
+            
+            for hash in list(trust_factors.keys())[:-1]:
+                count = trust_factors[hash][0]
+                senders = trust_factors[hash][1]
+                if max_count > count and len(senders) == 1:
+                    print("BAIXAR REPUTATION COMMIT ", senders[0])
+                    bizanti_node = senders[0]
+                    reputation[bizanti_node] -= 25
+                
+            greater_hash = list(trust_factors.keys())[-1]  # Safely access the last key
+            new_owner = trust_factors[greater_hash][2] # Get the new owner
+            new_amount = trust_factors[greater_hash][3]  # Get the new amount
+
+            # print(f"Major Hash: {greater_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
+            
+            data['owner'] = new_owner
+            data['amount'] = new_amount
+
+        # print("EXECUTAR")
         execute_operation(data)
                 
         return jsonify({"status": "committed"}), 200
@@ -490,7 +507,6 @@ def create_account():
 
         serialized_data = json.dumps(data, sort_keys=True) 
         digest = hashlib.sha256(serialized_data.encode()).hexdigest()
-        
         data["digest"] = digest
 
         broadcast_to_nodes("/preprepare", data)
