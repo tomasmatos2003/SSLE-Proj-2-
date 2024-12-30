@@ -52,6 +52,10 @@ def get_accounts():
     accounts_list = [account.to_dict() for account in accounts]
     return jsonify(accounts_list), 200
 
+@app.route('/reputations', methods=['GET'])
+def get_reputations():
+    return jsonify(reputation), 200
+
 
 def broadcast_to_nodes(endpoint, data):
     """Broadcast a message to all registered nodes concurrently."""
@@ -59,7 +63,9 @@ def broadcast_to_nodes(endpoint, data):
     
     data["node"] = thisnode
 
-    print("-> ", reputation)
+    if is_malicious:
+        data["amount"] = random.randint(0, 1000)
+    
 
     def send_request(node):
         delay = random.uniform(0, 1)
@@ -97,19 +103,16 @@ def preprepare():
     print("preprepare ", data)
     operation = data["operation"]        
     message_id = data["message_id"] 
-
-    if is_malicious:
-        data["amount"] = random.randint(0, 1000)
     
     request_digest = data.pop("digest", None)
     recv_node = data.pop("node", None) 
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
     data["digest"] = digest
-
+    print(".. ", request_digest, digest)
     if request_digest != digest:
-        print("LOWER THE REPUTATION ", recv_node)
-        reputation[recv_node] -= 10
+        print("LOWER THE REPUTATION  preprepare ", recv_node)
+        reputation[recv_node] -= 20
     else:
         print("ALL OK " )
 
@@ -130,7 +133,7 @@ def preprepare():
     if message_id not in prepared_messages:
         prepared_messages[message_id] = []
 
-    time.sleep(1) #ensure receiving
+    time.sleep(2) #ensure receiving
 
     broadcast_to_nodes("/prepare", data)
     
@@ -140,18 +143,63 @@ def preprepare():
 def checkDigests(message_id):
     trust_factors = {}  # Dictionary to store trust factors for each digest
     overall_counts = Counter()  # Aggregate digest counts across all phases
-    digest_details = {}  # Dictionary to store digest details (count and nodes)
+    digest_details = {}  # Dictionary to store digest details (count, nodes, owner, amount)
     majority_digests = {}  # Majority digest for each phase
+
+    def resolve_conflict(digest, amount1, message):
+        
+        message.pop("digest", None)
+        message.pop("node", None) 
+        serialized_data = json.dumps(message, sort_keys=True) 
+        digest_m = hashlib.sha256(serialized_data.encode()).hexdigest()
+
+        if digest_m == digest:
+            return message["amount"]
+        
+        message["amount"] = amount1
+        serialized_data = json.dumps(message, sort_keys=True) 
+        digest_a1 = hashlib.sha256(serialized_data.encode()).hexdigest()
+        if digest_a1 == digest:
+            return amount1
+        
+        return None
+
+
 
     def process_messages(phase_name, messages):
         """Helper function to process messages and compute trust factors."""
         digest_nodes = {}
+        digest_owners = {}
+        digest_amounts = {}
+
         for m in messages:
             digest = m["digest"]
             node = m["node"]
+            owner = m["owner"]
+            amount = m["amount"]
+
             if digest not in digest_nodes:
                 digest_nodes[digest] = []
+                digest_owners[digest] = None  # Single owner per digest
+                digest_amounts[digest] = None  # Single amount per digest
+
             digest_nodes[digest].append(node)
+
+            # Set the owner, ensuring consistency
+            if digest_owners[digest] is None:
+                digest_owners[digest] = owner
+            elif digest_owners[digest] != owner:
+                raise ValueError(f"Conflicting owners for digest {digest}: {digest_owners[digest]} vs {owner}")
+
+            # Set the amount, ensuring consistency
+            if digest_amounts[digest] is None:
+                digest_amounts[digest] = amount
+            elif digest_amounts[digest] != amount:
+                print(f"Conflict detected for digest {digest}: {digest_amounts[digest]} vs {amount}")
+                mcpy = m.copy()
+                correct_amount = resolve_conflict(digest, digest_amounts[digest], mcpy)
+                digest_amounts[digest] = correct_amount
+                print(f"Resolved conflict for digest {digest}. Correct amount: {correct_amount}")
 
         # Count occurrences of each digest
         digest_counts = Counter({digest: len(nodes) for digest, nodes in digest_nodes.items()})
@@ -172,8 +220,13 @@ def checkDigests(message_id):
             trust_factors[digest] += count
 
             if digest not in digest_details:
-                digest_details[digest] = (0, [])
-            digest_details[digest] = (digest_details[digest][0] + count, digest_details[digest][1] + nodes)
+                digest_details[digest] = (0, [], None, None)  # Initialize with placeholders
+            digest_details[digest] = (
+                digest_details[digest][0] + count,  # Total count
+                digest_details[digest][1] + nodes,  # List of nodes
+                digest_owners[digest],  # Single owner
+                digest_amounts[digest],  # Single amount
+            )
 
         # Debugging output
         print(f"[{phase_name.capitalize()}] Digest Details: {digest_nodes}")
@@ -197,13 +250,11 @@ def checkDigests(message_id):
     sorted_digest_details = dict(sorted(digest_details.items(), key=lambda item: item[1][0]))
 
     # Debugging output
-    # print(f"Overall Majority Digest: {overall_majority_digest} with count {overall_majority_count}")
-    # print(f"Trust Factors: {trust_factors}")
-    # print(f"Sorted Digest Details: {sorted_digest_details}")
+    print(f"Overall Majority Digest: {overall_majority_digest} with count {overall_majority_count}")
+    print(f"Trust Factors: {trust_factors}")
+    print(f"Sorted Digest Details: {sorted_digest_details}")
     
     return sorted_digest_details, overall_majority_count  # Return sorted dictionary
-
-
 
 @app.route('/prepare', methods=['POST'])
 def prepare():
@@ -214,9 +265,6 @@ def prepare():
     operation = data["operation"]
     message_id = data["message_id"]
 
-    if is_malicious:
-        data["amount"] = random.randint(0, 1000)
-
     request_digest = data.pop("digest", None)
     recv_node = data.pop("node", None) 
 
@@ -225,8 +273,8 @@ def prepare():
     data["digest"] = digest
     
     if request_digest != digest:
-        print("LOWER THE REPUTATION  ", recv_node)
-        reputation[recv_node] -= 10
+        print("LOWER THE REPUTATION prepare  ", recv_node)
+        reputation[recv_node] -= 20
     else:
         print("ALL OK")
 
@@ -243,43 +291,58 @@ def prepare():
         print(len(prepared_messages[message_id]), quorum_size)
 
     trust_factors, max_count = checkDigests(message_id)
-
+    print("trust ", trust_factors)
     # exclude the last because it is the majority
     print("MAX ", max_count)
-    for hash in list(trust_factors.keys())[:-1]:
-        count = trust_factors[hash][0]
-        senders = trust_factors[hash][1]
-        if max_count > count and len(senders) == 1:
-            print("BAIXAR REP")
-            bizanti_node = senders[0]
-            reputation[bizanti_node] -= 50
-        else:
-            print("NAO BAIXAR")
-        
-        print(hash, " : ", trust_factors[hash])
 
+    datacopy = data.copy()
+
+    if not trust_factors:
+        print("No trust factors to process.")
+    else:
+        for hash in list(trust_factors.keys())[:-1]:
+            count = trust_factors[hash][0]
+            senders = trust_factors[hash][1]
+            if max_count > count and len(senders) == 1:
+                print("BAIXAR REP")
+                bizanti_node = senders[0]
+                reputation[bizanti_node] -= 30
+            # else:
+            #     print("NAO BAIXAR")
+            
+            # print(hash, " : ", trust_factors[hash])
+
+        major_hash = list(trust_factors.keys())[-1]
+        new_owner = trust_factors[major_hash][2][0]
+        new_amount = trust_factors[major_hash][3][0]
+        
+        
+        datacopy['owner'] = new_owner
+        datacopy['amount'] = new_amount
 
     if message_id not in preprepared_messages.keys() :
 
-        print("SOU O PROPOSER")
+        # print("SOU O PROPOSER")
             
         if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size:
-            
-            time.sleep(1) #ensure receiving
+            print("VAI DALE ",trust_factors )
+            print("COMMIT " , datacopy)
+            time.sleep(2) #ensure receiving
           
-            broadcast_to_nodes("/commit", data)
+            broadcast_to_nodes("/commit", datacopy)
                 
             return jsonify({"status": "prepared"}), 200
     # is a regular
     elif len(preprepared_messages[message_id]) == 1: 
-        print("SOU UM NORMAL")
+        # print("SOU UM NORMAL")
        
         if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size - 1:
-            print("COMMIT")
+            print("VAI DALE ",trust_factors )
+            print("COMMIT " , datacopy)
 
-            time.sleep(1) #ensure receiving
-            
-            broadcast_to_nodes("/commit", data)
+            time.sleep(2) #ensure receiving
+
+            broadcast_to_nodes("/commit", datacopy)
                 
             return jsonify({"status": "prepared"}), 200
 
@@ -296,22 +359,18 @@ def commit():
     operation = data["operation"]
     message_id = data["message_id"]
 
-    if is_malicious:
-        data["amount"] = random.randint(0, 1000)
-
     request_digest = data.pop("digest", None)
     recv_node = data.pop("node", None) 
+
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
     data["digest"] = digest
-    
-    if request_digest != digest:
-        print("LOWER THE REPUTATION ", recv_node)
-        reputation[recv_node] -= 10
-    else:
-        print("ALL OK")
 
-    print(f"[Commit] Received operation: {operation} from {recv_node}")
+    if request_digest != digest:
+        print("LOWER THE REPUTATION commit", recv_node)
+        reputation[recv_node] -= 20
+
+    print(f"[Commit] Received operation: {operation} from {recv_node}, data {data}")
     
     data["node"] = recv_node
 
@@ -320,14 +379,41 @@ def commit():
     
     committed_messages[message_id].append(data)  # SOLVEE here - change operation to an req id []
 
+
+    trust_factors, max_count = checkDigests(message_id)
+    print("trust ", trust_factors)
+    # exclude the last because it is the majority
+    print("MAX ", max_count)
+
+    if not trust_factors:
+        print("No trust factors to process.")
+    else:
+        for hash in list(trust_factors.keys())[:-1]:
+            count = trust_factors[hash][0]
+            senders = trust_factors[hash][1]
+            if max_count > count and len(senders) == 1:
+                print("BAIXAR REP")
+                bizanti_node = senders[0]
+                reputation[bizanti_node] -= 30
+            
+        major_hash = list(trust_factors.keys())[-1]  # Safely access the last key
+        new_owner = trust_factors[major_hash][2][0]  # Get the new owner
+        new_amount = trust_factors[major_hash][3][0]  # Get the new amount
+
+        print(f"Major Hash: {major_hash}, New Owner: {new_owner}, New Amount: {new_amount}")
+
+        
+        data['owner'] = new_owner
+        data['amount'] = new_amount
+
     n = len(nodes)  
     b = n // 3
     quorum_size = n - b
 
-    print(len(committed_messages[message_id]) , quorum_size, quorum_size == len(committed_messages[message_id]))
+    # print(len(committed_messages[message_id]) , quorum_size, quorum_size == len(committed_messages[message_id]))
 
     if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
-
+        
         print("EXECUTAR")
         execute_operation(data)
         
@@ -407,15 +493,14 @@ def create_account():
     
     prepared_messages[message_id] = []
 
-    if is_malicious:
-        data["amount"] = random.randint(0, 1000)
-
     print(f"[Create Account] Request received: {data}")
     if int(data.get("consenso", 0)) == 1:
         data["operation"] = "create_account"
 
         serialized_data = json.dumps(data, sort_keys=True) 
         digest = hashlib.sha256(serialized_data.encode()).hexdigest()
+        
+        print(serialized_data , " ..")
         data["digest"] = digest
 
         broadcast_to_nodes("/preprepare", data)
@@ -435,9 +520,6 @@ def deposit():
     message_id = str(uuid.uuid4())
     data["message_id"] = message_id 
     prepared_messages[message_id] = []
-
-    if is_malicious:
-        data["amount"] = random.randint(0, 1000)
 
     print(f"[Deposit] Request received from: {data}")
     if int(data.get("consenso", 0)) == 1:
@@ -464,9 +546,6 @@ def withdraw():
     message_id = str(uuid.uuid4())
     data["message_id"] = message_id 
     prepared_messages[message_id] = []
-
-    if is_malicious:
-        data["amount"] = random.randint(0, 1000)
 
     print(f"[Withdraw] Request received from: {data}")
     if int(data.get("consenso", 0)) == 1:

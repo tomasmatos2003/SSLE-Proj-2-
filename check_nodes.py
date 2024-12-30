@@ -11,7 +11,8 @@ def main_menu():
         print("2. Add account")
         print("3. Withdraw from account")
         print("4. Deposit in account")
-        print("5. Exit")
+        print("5. Check reputations")
+        print("6. Exit")
         choice = input("Choose an option (1-5): ")
         
         response = requests.get(registy + "/nodes")
@@ -50,7 +51,7 @@ def main_menu():
                 continue
 
             owner = input("     Owner:")
-            amount = float(input("     Amount:"))
+            amount = int(input("     Amount:"))
 
             try:
 
@@ -78,7 +79,7 @@ def main_menu():
                 continue
 
             owner = input("     Owner:")
-            amount = float(input("     Amount:"))
+            amount = int(input("     Amount:"))
 
             try:
 
@@ -106,7 +107,7 @@ def main_menu():
                 continue
 
             owner = input("     Owner:")
-            amount = float(input("     Amount:"))
+            amount = int(input("     Amount:"))
 
             try:
 
@@ -121,8 +122,22 @@ def main_menu():
             except:
                 print("     - Something went wrong")
                 pass
-
         elif choice == "5":
+            for node in nodes:
+                print(" Node: " + node)
+
+                try:
+
+                    response = requests.get(node+"/reputations")
+
+                    print("     ", response.json(), "\n")
+
+                except:
+                    print("     - Something went wrong")
+                    pass
+
+
+        elif choice == "6":
             print("Exiting the program. Goodbye!")
             sys.exit(0)
         else:
