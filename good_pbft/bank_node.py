@@ -25,7 +25,6 @@ nodes = []
 reputation = {}
 quorum_size = 0
 
-
 @app.route('/health', methods=['GET'])
 def get_health():
     return jsonify(), 200
@@ -37,11 +36,12 @@ def addnode():
     data = request.form.to_dict()
     url = data["url"]
 
+    reputation[url] = 100
     if url in nodes:
         return jsonify({"status": "rejected"}), 400
 
     nodes.append(url)
-    reputation[url] = 100
+    
 
     print(nodes)
     return jsonify({"status": "accepted"}), 200
@@ -66,7 +66,6 @@ def broadcast_to_nodes(endpoint, data):
     if is_malicious:
         data["amount"] = random.randint(0, 1000)
     
-
     def send_request(node):
         delay = random.uniform(0, 1)
         try:
@@ -78,11 +77,8 @@ def broadcast_to_nodes(endpoint, data):
             # requests.post(registry + "/rm_node", data={"url": node})
 
     threads = []
-    for node in nodes:
-        rep = reputation[node]
-        if rep < 20:
-            continue
-
+    nodes = [node for node in nodes if reputation[node] >= 20]
+    for node in nodes:        
         thread = threading.Thread(target=send_request, args=(node,))
         threads.append(thread)
         thread.start()
@@ -112,14 +108,14 @@ def preprepare():
     data["digest"] = digest
 
     if request_digest != digest:
-        print("LOWER THE REPUTATION preprepare ", recv_node)
+        print("LOWER THE REPUTATION preprepare ", recv_node, " -> ", serialized_data, request_digest, digest)
         reputation[recv_node] -= 25
+
+        data_ = reputation.copy()
+        data_["node"] = thisnode
+        requests.post(registry + "/update_reputation", data=data_)
     # else:
     #     print("ALL OK " )
-
-    if reputation[recv_node] < 20:
-        return jsonify({"status": "rejected"}), 400
-        
 
     print(f"[Pre-Prepare] Received operation: {operation} from {recv_node}")
     
@@ -271,21 +267,28 @@ def prepare():
 
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
-    data["digest"] = request_digest
+    data["digest"] = digest
     
     if request_digest != digest:
         print("LOWER THE REPUTATION prepare  ", recv_node)
         reputation[recv_node] -= 25
-    # else:
-    #     print("ALL OK")
+
+        data_ = reputation.copy()
+        data_["node"] = thisnode
+        requests.post(registry + "/update_reputation", data=data_)
 
     print(f"[Prepare] Received operation: {operation} from {recv_node} data: {data}")
     
     data["node"] = recv_node
 
-    n = len(nodes)  
+    n = len(nodes) 
+    
     b = n // 3
     quorum_size = n - b
+
+    if n < 3:
+        quorum_size = 1
+    
     # print("QUORUM ", quorum_size)
     
     if message_id in prepared_messages:
@@ -313,6 +316,10 @@ def prepare():
                         print("BAIXAR REPUTATION PREPARE ", senders[0])
                         bizanti_node = senders[0]
                         reputation[bizanti_node] -= 25
+
+                        data_ = reputation.copy()
+                        data_["node"] = thisnode
+                        requests.post(registry + "/update_reputation", data=data_)
 
                 greater_hash = list(trust_factors.keys())[-1]
                 new_owner = trust_factors[greater_hash][2]
@@ -344,6 +351,10 @@ def prepare():
                         print("BAIXAR REPUTATION PREPARE ", senders[0])
                         bizanti_node = senders[0]
                         reputation[bizanti_node] -= 25
+
+                        data_ = reputation.copy()
+                        data_["node"] = thisnode
+                        requests.post(registry + "/update_reputation", data=data_)
 
                 greater_hash = list(trust_factors.keys())[-1]
                 new_owner = trust_factors[greater_hash][2]
@@ -380,12 +391,16 @@ def commit():
 
     serialized_data = json.dumps(data, sort_keys=True) 
     digest = hashlib.sha256(serialized_data.encode()).hexdigest()
-    data["digest"] = request_digest
+    data["digest"] = digest
 
 
     if request_digest != digest:
         print("LOWER THE REPUTATION commit ", recv_node , " data ", serialized_data, " digest ", digest, " req_digest ", request_digest)
         reputation[recv_node] -= 25
+
+        data_ = reputation.copy()
+        data_["node"] = thisnode
+        requests.post(registry + "/update_reputation", data=data_)
 
     print(f"[Commit] Received operation: {operation} from {recv_node}, data {data}")
     
@@ -398,13 +413,16 @@ def commit():
 
     trust_factors, max_count = checkDigests(message_id)
 
-    n = len(nodes)  
+    n = len(nodes) 
+
     b = n // 3
     quorum_size = n - b
 
+    if n < 3:
+        quorum_size = 2
+
     if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
         
-
         if trust_factors:
             
             for hash in list(trust_factors.keys())[:-1]:
@@ -414,6 +432,10 @@ def commit():
                     print("BAIXAR REPUTATION COMMIT ", senders[0])
                     bizanti_node = senders[0]
                     reputation[bizanti_node] -= 25
+
+                    data_ = reputation.copy()
+                    data_["node"] = thisnode
+                    requests.post(registry + "/update_reputation", data=data_)
                 
             greater_hash = list(trust_factors.keys())[-1]  # Safely access the last key
             new_owner = trust_factors[greater_hash][2] # Get the new owner
@@ -498,7 +520,8 @@ def create_account():
 
     message_id = str(uuid.uuid4())
     data["message_id"] = message_id 
-    
+
+
     prepared_messages[message_id] = []
 
     print(f"[Create Account] Request received: {data}")
@@ -525,6 +548,7 @@ def deposit():
     
     message_id = str(uuid.uuid4())
     data["message_id"] = message_id 
+
     prepared_messages[message_id] = []
 
     print(f"[Deposit] Request received from: {data}")
@@ -551,6 +575,7 @@ def withdraw():
 
     message_id = str(uuid.uuid4())
     data["message_id"] = message_id 
+
     prepared_messages[message_id] = []
 
     print(f"[Withdraw] Request received from: {data}")
