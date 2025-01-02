@@ -65,7 +65,7 @@ def rm_node():
     return jsonify(nodes), 409
 
 def check_bizantines(reputations):
-    print("--> ", reputations)
+
     suspected_byzantine_nodes = []
 
     dic = {node : [] for node in reputations.keys()}
@@ -76,11 +76,14 @@ def check_bizantines(reputations):
                 dic[n] = []
             dic[n].append(reputations[node][n])
 
-    print("DALE", dic)
+    b = (len(nodes) - 1) // 3
+
+    if len(nodes) <= 3:
+        b = 1
 
     for node in dic.keys():
         int_scores = [int(score) for score in dic[node]]
-        if len(int_scores) == len(nodes) - 1:
+        if len(int_scores) == len(nodes) - b:
             
             average_score = sum(int_scores) / len(int_scores)
             if average_score < 20:
