@@ -12,8 +12,7 @@ def main_menu():
         print("3. Withdraw from account")
         print("4. Deposit in account")
         print("5. Check reputations")
-        print("6. Check Suspicious Bizantines")
-        print("7. Exit")
+        print("6. Exit")
         choice = input("Choose an option (1-5): ")
         
         response = requests.get(registy + "/nodes")
@@ -138,20 +137,6 @@ def main_menu():
                     pass
 
         elif choice == "6":
-            
-            try:
-
-                response = requests.get(registy+"/bizantines")
-                print("     Suspicious Bizantine nodes:")
-                for node in response.json():
-
-                    print("         ", node)
-
-            except:
-                print("     - Something went wrong")
-                pass
-
-        elif choice == "7":
             print("Exiting the program. Goodbye!")
             sys.exit(0)
         else:

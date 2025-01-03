@@ -1,0 +1,23 @@
+{
+  "name": "ssle-proj-2-",
+  "version": "1.0.0",
+  "description": "#### 1 python3 registry.py",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasmatos2003/SSLE-Proj-2-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tomasmatos2003/SSLE-Proj-2-/issues"
+  },
+  "homepage": "https://github.com/tomasmatos2003/SSLE-Proj-2-#readme",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

@@ -1,27 +1,8 @@
 from flask import Flask, jsonify, request
-import requests
-import threading
-import time
 
 app = Flask(__name__)
 
 nodes = []
-
-# def health_check():
-#     global nodes
-#     while True:
-#         to_rm = []
-#         for node in nodes:
-#             try:
-#                 response = requests.get(node + "/health", timeout=5)
-#                 if response.status_code != 200:
-#                     to_rm.append(node)
-#             except requests.exceptions.RequestException:
-#                 to_rm.append(node)
-
-#         nodes = [n for n in nodes if n not in to_rm]
-#         time.sleep(30) 
-
 reputations = {}
 bizantines = []
 
@@ -64,47 +45,6 @@ def rm_node():
 
     return jsonify(nodes), 409
 
-def check_bizantines(reputations):
-
-    suspected_byzantine_nodes = []
-
-    dic = {node : [] for node in reputations.keys()}
-
-    for node in reputations.keys():
-        for n in reputations[node].keys():
-            if n not in dic:
-                dic[n] = []
-            dic[n].append(reputations[node][n])
-
-    b = (len(nodes) - 1) // 3
-
-    if len(nodes) <= 3:
-        b = 1
-
-    for node in dic.keys():
-        int_scores = [int(score) for score in dic[node]]
-        if len(int_scores) == len(nodes) - b:
-            
-            average_score = sum(int_scores) / len(int_scores)
-            if average_score < 20:
-                suspected_byzantine_nodes.append(node)
-
-    return suspected_byzantine_nodes
-
-@app.route('/update_reputation', methods=['POST'])
-def update_reputation():
-    global bizantines
-
-    data = request.form.to_dict()
-    node = data.pop("node", None)
-    reputations[node] = data
-
-    bizantines = check_bizantines(reputations)
-
-    return jsonify(nodes), 200
 
 if __name__ == '__main__':
-    # health_check_thread = threading.Thread(target=health_check, daemon=True)
-    # health_check_thread.start()
-
     app.run(host='0.0.0.0', port=5000)

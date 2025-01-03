@@ -3,6 +3,15 @@
 #### 1
 python3 registry.py 
 
+or
+
+/registy_js do:
+
+node -v
+npm init -y  # Initializes a new Node.js project
+npm install express
+node app.jss
+
 #### 2 
 ##### (option 1)
 Vulneable to node failures and bizantines
