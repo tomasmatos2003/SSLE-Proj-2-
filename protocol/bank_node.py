@@ -181,9 +181,6 @@ def preprepare():
         print("LOWER THE REPUTATION preprepare ", recv_node, " -> ", serialized_data, request_digest, digest)
         reputation[recv_node] -= 25 if reputation[recv_node] >= 25 else 0
 
-        data_ = reputation.copy()
-        data_["node"] = thisnode
-
 
     print(f"[Pre-Prepare] Received operation: {operation} from {recv_node}")
     
@@ -320,11 +317,8 @@ def prepare():
     data["digest"] = digest
     
     if request_digest != digest:
-        print("LOWER THE REPUTATION prepare  ", recv_node)
         reputation[recv_node] -= 25 if reputation[recv_node] >= 25 else 0
 
-        data_ = reputation.copy()
-        data_["node"] = thisnode
 
     print(f"[Prepare] Received operation: {operation} from {recv_node} data: {data}")
     
@@ -360,14 +354,7 @@ def prepare():
                 
                 datacopy['owner'] = new_owner
                 datacopy['amount'] = new_amount
-
-            datacopy.pop("digest", None)
-            datacopy.pop("node", None) 
-
-            serialized_data = json.dumps(datacopy, sort_keys=True) 
-            digest_ = hashlib.sha256(serialized_data.encode()).hexdigest()
-            datacopy["digest"] = digest_
-            datacopy["node"]  = thisnode
+                datacopy['digest'] = greater_hash
 
             time.sleep(2) #ensure receiving
           
@@ -388,15 +375,9 @@ def prepare():
                 
                 datacopy['owner'] = new_owner
                 datacopy['amount'] = new_amount
+                datacopy['digest'] = greater_hash
 
-            datacopy.pop("digest", None)
-            datacopy.pop("node", None) 
-
-            serialized_data = json.dumps(datacopy, sort_keys=True) 
-            digest_ = hashlib.sha256(serialized_data.encode()).hexdigest()
-            datacopy["digest"] = digest_
-            datacopy["node"]  = thisnode
-
+        
             # print("COMMIT " , datacopy)
 
             time.sleep(2) #ensure receiving
@@ -429,9 +410,6 @@ def commit():
     if request_digest != digest:
         print("LOWER THE REPUTATION commit ", recv_node , " data ", serialized_data, " digest ", digest, " req_digest ", request_digest)
         reputation[recv_node] -= 25 if reputation[recv_node] >= 25 else 0
-
-        data_ = reputation.copy()
-        data_["node"] = thisnode
     
 
     print(f"[Commit] Received operation: {operation} from {recv_node}, data {data}")
@@ -451,22 +429,22 @@ def commit():
     quorum_size = n - b
 
     if n < 3:
-        quorum_size = 2
+        quorum_size = 1
 
     if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
         
         if trust_factors:
             
-            for hash in list(trust_factors.keys())[:-1]:
-                count = trust_factors[hash][0]
-                senders = trust_factors[hash][1]
-                if max_count > count and len(senders) == 1:
-                    print("BAIXAR REPUTATION COMMIT ", senders[0])
-                    bizanti_node = senders[0]
-                    reputation[bizanti_node] -= 25
+            # for hash in list(trust_factors.keys())[:-1]:
+            #     count = trust_factors[hash][0]
+            #     senders = trust_factors[hash][1]
+            #     if max_count > count:
 
-                    data_ = reputation.copy()
-                    data_["node"] = thisnode
+            #         for sender in senders:
+            #             print("BAIXAR REPUTATION COMMIT ", sender)
+                    
+            #             reputation[sender] -= 25
+
                 
                 
             greater_hash = list(trust_factors.keys())[-1]  
@@ -640,7 +618,7 @@ def change_port():
 
     print(f"Changing port to {random_port}...")
 
-    subprocess.Popen([sys.executable, 'good_pbft/bank_node.py', str(random_port)])
+    subprocess.Popen([sys.executable, 'protocol/bank_node.py', str(random_port)])
 
     sys.exit()
         
