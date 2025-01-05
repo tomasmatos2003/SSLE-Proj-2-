@@ -18,7 +18,7 @@ registry = "http://0.0.0.0:5000"
 incus_ip = "0.0.0.0"
 is_malicious = False
 
-# PBFT State
+# states
 preprepared_messages = {}
 prepared_messages = {}
 committed_messages = {}
@@ -75,7 +75,7 @@ def get_reputations():
 
 
 def broadcast_to_nodes(endpoint, data):
-    """Broadcast a message to all registered nodes concurrently."""
+   
     global nodes, thisnode
     
     data["node"] = thisnode
@@ -109,7 +109,6 @@ def broadcast_to_nodes(endpoint, data):
 def fix_bizantine_changes(pre_messages):  
     global preprepared_messages
     
-    print("PREPREPARE: ", pre_messages)
     to_remove = []
 
     for id, messages in pre_messages.items():
@@ -132,18 +131,14 @@ def reverse_execution(msg):
     owner = msg["owner"]
     amount = msg["amount"]
 
-    if operation == "create_account":
-        print("REMOVE")
-       
+    if operation == "create_account":       
         remaining_accounts = []
 
         for account in accounts:
            
             if account.owner == owner:
-                print(f"Removing account owned by {account.owner} with balance {account.balance}")
                 continue
             else:
-                print("Condition not met for this account.")
                 remaining_accounts.append(account)
 
         accounts.clear()
@@ -178,7 +173,6 @@ def preprepare():
     data["digest"] = digest
 
     if request_digest != digest:
-        print("LOWER THE REPUTATION preprepare ", recv_node, " -> ", serialized_data, request_digest, digest)
         reputation[recv_node] -= 25 if reputation[recv_node] >= 25 else 0
 
 
@@ -195,8 +189,7 @@ def preprepare():
     if message_id not in prepared_messages:
         prepared_messages[message_id] = []
 
-    time.sleep(2) #ensure receiving
-
+    time.sleep(2) 
     broadcast_to_nodes("/prepare", data)
     
     return jsonify({"status": "accepted"}), 200
@@ -255,11 +248,10 @@ def checkDigests(message_id):
             if digest_amounts[digest] is None:
                 digest_amounts[digest] = amount
             elif digest_amounts[digest] != amount:
-                # print(f"Conflict detected for digest {digest}: {digest_amounts[digest]} vs {amount}")
+
                 mcpy = m.copy()
                 correct_amount = resolve_conflict(digest, digest_amounts[digest], mcpy)
                 digest_amounts[digest] = correct_amount
-                # print(f"Resolved conflict for digest {digest}. Correct amount: {correct_amount}")
 
         digest_counts = Counter({digest: len(nodes) for digest, nodes in digest_nodes.items()})
         overall_counts.update(digest_counts)
@@ -339,10 +331,10 @@ def prepare():
     trust_factors, max_count = checkDigests(message_id)
 
     datacopy = data.copy()
-
+    #is proposer
     if message_id not in preprepared_messages.keys() :
 
-        # print("SOU O PROPOSER")
+        
             
         if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size + 1:
           
@@ -356,14 +348,13 @@ def prepare():
                 datacopy['amount'] = new_amount
                 datacopy['digest'] = greater_hash
 
-            time.sleep(2) #ensure receiving
+            time.sleep(2) 
           
             broadcast_to_nodes("/commit", datacopy)
                 
             return jsonify({"status": "prepared"}), 200
     # is a regular
     elif len(preprepared_messages[message_id]) == 1: 
-        # print("SOU UM NORMAL")
        
         if message_id in prepared_messages and len(prepared_messages[message_id]) == quorum_size:
           
@@ -377,10 +368,7 @@ def prepare():
                 datacopy['amount'] = new_amount
                 datacopy['digest'] = greater_hash
 
-        
-            # print("COMMIT " , datacopy)
-
-            time.sleep(2) #ensure receiving
+            time.sleep(2) 
 
             broadcast_to_nodes("/commit", datacopy)
                 
@@ -408,7 +396,6 @@ def commit():
 
 
     if request_digest != digest:
-        print("LOWER THE REPUTATION commit ", recv_node , " data ", serialized_data, " digest ", digest, " req_digest ", request_digest)
         reputation[recv_node] -= 25 if reputation[recv_node] >= 25 else 0
     
 
@@ -434,19 +421,7 @@ def commit():
     if message_id in committed_messages and len(committed_messages[message_id]) == quorum_size:
         
         if trust_factors:
-            
-            # for hash in list(trust_factors.keys())[:-1]:
-            #     count = trust_factors[hash][0]
-            #     senders = trust_factors[hash][1]
-            #     if max_count > count:
-
-            #         for sender in senders:
-            #             print("BAIXAR REPUTATION COMMIT ", sender)
-                    
-            #             reputation[sender] -= 25
-
-                
-                
+                            
             greater_hash = list(trust_factors.keys())[-1]  
             new_owner = trust_factors[greater_hash][2]
             new_amount = trust_factors[greater_hash][3]  
@@ -454,7 +429,6 @@ def commit():
             data['owner'] = new_owner
             data['amount'] = new_amount
 
-        # print("EXECUTAR")
         execute_operation(data)
 
         fix_bizantine_changes(preprepared_messages)
